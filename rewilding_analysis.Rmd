@@ -1,0 +1,3049 @@
+---
+title: R markdown report
+author: "Alice Risely"
+date: "22/01/2024"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: true
+    toc_float:
+      collapsed: false
+    theme: journal
+    df_print: paged
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.height = 7, fig.width =10, time_it = TRUE, error = TRUE)
+```
+
+# Information
+
+Title: Extensive diversification of amphibian skin micro- and mycobiomes upon rewilding, with limited inter-domain interactions or effects of dietary ꞵ-carotene 
+Authors: Alice Risely, Phillip G. Byrne, David A, Hunter, Ana S. Carranco, Bethany J. Hoye, and Aimee J. Silla
+
+# Abstract
+
+The amphibian skin microbiome largely consists of bacterial and fungal taxa, and together this community is hypothesized to be important for mediating host immunity and pathogen defence. However, whilst there is substantial evidence that the skin microbiome is sensitive to captivity, there remains little understanding of how diet supplementation and subsequent rewilding of captive-bred individuals influence bacterial and fungal microbiome composition and their interactions during microbiome restructuring. This study investigated the effect of dietary beta-carotene supplementation and field release and on the bacterial and fungal microbiome of the critically endangered Southern Corroboree frog (Pseudophryne corroboree). Consistent with previous studies on bacterial microbiomes, we found large-scale restructuring and diversification of individual frog’s cutaneous bacterial communities post-release, and demonstrated similar diversification and restructuring of individuals’ cutaneous fungal communities. The rewilded fungal mycobiome was more transient and demonstrated stronger temporal and spatial fluctuations than the bacterial microbiome, suggesting that fungal communities are more sensitive to localised transmission and microbial invasion than bacterial communities. After accounting for the effect of temporal and spatial restructuring, we found strong residual associations between bacterial members, yet limited evidence for residual associations between fungal members or inter-domain associations, suggesting that co-occurrence patterns between bacteria and fungi are largely a result of shared responses to the environment rather than direct interactions. Lastly, we found supplementation of dietary beta-carotene in captivity had no impact on microbiome diversity but was associated with approximately 15% of common genera, with affected taxa differing between pre- and post-release frogs. Further research on the functional importance of bacterial and fungal dynamics upon rewilding will be crucial for developing strategies to support the health and survival of endangered amphibian species.
+
+Analyasis
+
+## Load packages
+
+```{r}
+
+library(phyloseq)
+library(ggplot2)
+library(vegan)
+library(dplyr)
+library(scales)
+library(grid)
+library(reshape2)
+library(ape)
+library(gridExtra)
+library(ade4)
+library(plyr)
+library(tidyr)
+library(data.table)
+library(stringr)
+library(ggrepel)
+library(decontam)
+library(ranacapa)
+library(patchwork)
+library(ggvenn)
+library(gllvm)
+library(ggvenn)
+library(ggpubr)
+library(viridis)
+library(NetCoMi)
+library(ggcorrplot)
+library(igraph)
+library(ggnetwork)
+library(microbiomeutilities)
+library(pheatmap)
+library(RColorBrewer)
+library(glmmTMB)
+library(sjPlot)
+library(wesanderson)
+
+
+```
+
+# Data import
+
+Note this data has gone through some rudimentary processing and filtering.
+
+```{r}
+setwd("C:/Users/risel/Dropbox/Academic projects/Frog microbiome UOW/Frogs_UOW/Longitudinal project/Analysis/Published")
+
+frog_16S <- readRDS("corroboree_16S.RDS")
+frog_ITS <- readRDS("corroboree_ITS.RDS")
+
+
+```
+
+
+
+## Study design
+
+```{r}
+
+ggplot(sample_data(frog_16S), aes(y = frog_id, x = TimePoint))+
+  geom_line(aes(group = frog_id), alpha = 0.5)+
+  geom_point(pch = 21, size = 4, width = 0.05, fill = "lightblue")+
+  theme_bw()
+
+
+```
+
+
+## Filter samples with low read depth 
+
+```{r}
+frog_16S<-subset_samples(frog_16S, Seq_depth> 2000)
+frog_ITS<-subset_samples(frog_ITS, Seq_depth> 1000)
+```
+
+
+## Change ASV names
+
+```{r}
+##### change names
+
+## change ASV names 
+
+taxtable<-data.frame(tax_table(frog_16S))
+taxtable$Taxa<-row.names(taxtable)
+head(taxtable)
+
+taxtable$ASV<-1:nrow(taxtable)
+taxtable$New_Taxa<-paste("B", "ASV", taxtable$ASV)
+
+taxa_names(frog_16S)<-taxtable$New_Taxa
+#tax_table(frog_16S)
+
+############################# fungi ###########
+
+taxtable<-data.frame(tax_table(frog_ITS))
+taxtable$Taxa<-row.names(taxtable)
+head(taxtable)
+
+taxtable$ASV<-1:nrow(taxtable)
+taxtable$New_Taxa<-paste("F", "ASV", taxtable$ASV)
+
+taxa_names(frog_ITS)<-taxtable$New_Taxa
+
+```
+
+## Rarefaction curves
+
+```{r echo = F}
+
+### rarefaction curves ##########
+### rarefaction curves ##########
+
+rarefaction_V4<- ggrare(frog_16S, step = 500, se = TRUE)+xlim(c(0,5000))+ggtitle("Bacteria")+geom_vline(xintercept = 2000, linetype = "dashed")
+
+rarefaction_ITS<- ggrare(frog_ITS, step = 500, se = TRUE)+xlim(c(0,5000))+ggtitle("Fungi")+geom_vline(xintercept = 1000, linetype = "dashed")
+
+
+####### rarefy ####
+####### rarefy ####
+####### rarefy ####
+####### rarefy ####
+
+V4_rare <- rarefy_even_depth(frog_16S, sample.size = 2000)
+ITS_rare <- rarefy_even_depth(frog_ITS, sample.size = 1000)
+
+
+```
+
+```{r}
+
+rarefaction_V4+rarefaction_ITS
+
+```
+
+# Effect of soft release
+
+#### Barplots: Location/Enclosure
+
+```{r}
+
+
+###### phylum level ####
+###### phylum level ####
+###### phylum level ####
+###### phylum level ####
+
+
+
+V4_Phylum<- microbiome::aggregate_top_taxa(V4_rare, "Phylum", top = 11)
+
+V4_melt<-psmelt(V4_Phylum)
+
+V4_melt<-subset(V4_melt, OTU == "Proteobacteria")
+V4_melt<- V4_melt %>% arrange(-Abundance)
+dim(V4_melt)
+
+sample_order<-V4_melt$Sample
+
+
+V4_barplot <- speedyseq::plot_bar(V4_Phylum, fill = "Phylum")+
+  geom_bar(  stat = "identity",width = 0.95)+
+  scale_fill_brewer( palette = "Paired", direction = -1)+
+  facet_grid(~TimePoint+location, scales = "free", space='free')+
+  ggtitle("a) Bacteria")+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())+
+  theme(legend.key.size = unit(0.5, "cm"))+
+  labs(fill = "Bacterial Phylum")
+
+
+V4_barplot$data$Sample <- factor(V4_barplot$data$Sample, levels = sample_order)
+
+
+###################################################
+###################################################
+###################################################
+
+
+ITS_Phylum<- microbiome::aggregate_top_taxa(ITS_rare, "Phylum", top = 11)
+
+ITS_melt<-psmelt(ITS_Phylum)
+ITS_melt<-subset(ITS_melt, OTU == "Basidiomycota")
+ITS_melt<- ITS_melt %>% arrange(-Abundance)
+dim(ITS_melt)
+
+sample_order_ITS<-ITS_melt$Sample
+
+
+ITS_barplot<-speedyseq::plot_bar(ITS_Phylum, fill = "Phylum")+
+  geom_bar(  stat = "identity",width = 0.95)+
+  scale_fill_brewer( palette = "Paired", direction = 1)+
+  facet_grid(~TimePoint+location, scales = "free", space='free')+
+  ggtitle("b) Fungi")+
+  theme(axis.text.x = element_blank())+
+  theme(legend.key.size = unit(0.5, "cm"))+
+  labs(fill = "Fungal Phylum")
+
+ITS_barplot$data$Sample <- factor(ITS_barplot$data$Sample, levels = sample_order_ITS)
+
+
+V4_barplot /ITS_barplot
+
+
+## genus level ###
+## genus level ###
+## genus level ###
+## genus level ###
+
+
+names(wes_palettes)
+
+pala<- wes_palette("Rushmore1", 5, type = c("discrete"))
+
+palb<- wes_palette("GrandBudapest2", 4, type = c("discrete"))
+
+palneon<- c("#af3dff", 	"#55ffe1",	"#ff3b94" ,	"#a6fd29" ,	"#37013a" )	
+
+palx<-brewer.pal(12,"Paired")
+#paly<-brewer.pal(12,"Dark2")
+pali<-brewer.pal(12,"Pastel1")
+
+palz<-c(palx, pala, palb, palneon)
+
+palz[14]<- "bisque1"
+palz[17]<- "tomato1"
+
+
+V4_genus<- microbiome::aggregate_top_taxa(V4_rare, "Genus", top = 24)
+
+
+V4_barplot <- speedyseq::plot_bar(V4_genus, fill = "Genus")+
+  geom_bar(  stat = "identity",width = 0.95)+
+  scale_fill_manual( values = palz)+
+  facet_grid(~TimePoint+location, scales = "free", space='free')+
+  ggtitle("a) Bacteria")+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())+
+  theme(legend.key.size = unit(0.4, "cm"))+
+  labs(fill = "Bacterial genus")
+
+
+# order samples
+
+V4_barplot$data$Sample <- factor(V4_barplot$data$Sample, levels = sample_order)
+
+###################################################
+###################################################
+###################################################
+
+
+ITS_genus<- microbiome::aggregate_top_taxa(ITS_rare, "Genus", top = 24)
+
+
+ITS_barplot<-speedyseq::plot_bar(ITS_genus, fill = "Genus")+
+  geom_bar(  stat = "identity",width = 0.95)+
+  scale_fill_manual( values = palz)+
+  facet_grid(~TimePoint+location, scales = "free", space='free')+
+  ggtitle("b) Fungi")+
+  theme(axis.text.x = element_blank())+
+  theme(legend.key.size = unit(0.4, "cm"))+
+  labs(fill = "Fungal genus")
+
+# order samples
+
+ITS_barplot$data$Sample <- factor(ITS_barplot$data$Sample, levels = sample_order_ITS)
+
+V4_barplot /ITS_barplot
+
+
+```
+
+#### Venn diagram
+
+```{r}
+
+## lab vs wild 
+
+lab_ps<-subset_samples(frog_16S, TimePoint == "T1 (lab)")
+lab_ps<-prune_taxa(taxa_sums(lab_ps)>0, lab_ps)
+
+wild_ps<-subset_samples(frog_16S, TimePoint != "T1 (lab)")
+wild_ps<-prune_taxa(taxa_sums(wild_ps)>0, wild_ps)
+
+
+lab_ASVs<-taxa_names(lab_ps)
+wild_ASVs<-taxa_names(wild_ps)
+
+
+x <- list(
+  lab = lab_ASVs,
+  wild = wild_ASVs
+)
+
+
+ggvenn(
+  x, 
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 4)
+
+
+#### ITS### 
+
+
+lab_ps<-subset_samples(frog_ITS, TimePoint == "T1 (lab)")
+lab_ps<-prune_taxa(taxa_sums(lab_ps)>0, lab_ps)
+
+wild_ps<-subset_samples(frog_ITS, TimePoint != "T1 (lab)")
+wild_ps<-prune_taxa(taxa_sums(wild_ps)>0, wild_ps)
+
+
+lab_ASVs<-taxa_names(lab_ps)
+wild_ASVs<-taxa_names(wild_ps)
+
+
+x <- list(
+  lab = lab_ASVs,
+  wild = wild_ASVs
+)
+
+
+ggvenn(
+  x, 
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 4)
+
+##### genus level ####
+##### genus level ####
+##### genus level ####
+##### genus level ####
+##### genus level ####
+
+
+## lab vs wild 
+
+lab_ps<-subset_samples(V4_genus, TimePoint == "T1 (lab)")
+lab_ps<-prune_taxa(taxa_sums(lab_ps)>0, lab_ps)
+
+wild_ps<-subset_samples(V4_genus, TimePoint != "T1 (lab)")
+wild_ps<-prune_taxa(taxa_sums(wild_ps)>0, wild_ps)
+
+
+lab_ASVs<-taxa_names(lab_ps)
+wild_ASVs<-taxa_names(wild_ps)
+
+
+x <- list(
+  lab = lab_ASVs,
+  wild = wild_ASVs
+)
+
+
+ggvenn(
+  x, 
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 4)
+
+
+#### ITS### 
+
+
+lab_ps<-subset_samples(ITS_genus, TimePoint == "T1 (lab)")
+lab_ps<-prune_taxa(taxa_sums(lab_ps)>0, lab_ps)
+
+wild_ps<-subset_samples(ITS_genus, TimePoint != "T1 (lab)")
+wild_ps<-prune_taxa(taxa_sums(wild_ps)>0, wild_ps)
+
+
+lab_ASVs<-taxa_names(lab_ps)
+wild_ASVs<-taxa_names(wild_ps)
+
+
+x <- list(
+  lab = lab_ASVs,
+  wild = wild_ASVs
+)
+
+
+ggvenn(
+  x, 
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 4)
+
+
+
+```
+
+#### Prevalence stats - phylum level
+
+```{r}
+
+prevalence <- function(physeq, add_tax = TRUE){
+  
+  ## Check if taxa are rows
+  trows <- taxa_are_rows(physeq)
+  
+  ## Extract OTU table
+  otutab <- as.data.frame(otu_table(physeq))
+  
+  ## Transpose OTU table (species should be arranged by rows)
+  if(trows == FALSE){
+    otutab <- t(otutab)
+  }
+  
+  ## Estimate prevalence (number of samples with OTU present)
+  prevdf <- apply(X = otutab,
+                  #MARGIN = ifelse(trows, yes = 1, no = 2),  # for a non-transposed data
+                  MARGIN = 1,
+                  FUN = function(x){sum(x > 0)})
+  
+  ## Add total and average read counts per OTU
+  prevdf <- data.frame(Prevalence = prevdf,
+                       TotalAbundance = taxa_sums(physeq),
+                       MeanAbundance = rowMeans(otutab),
+                       MedianAbundance = apply(otutab, 1, median))
+  
+  ## Add taxonomy table
+  if(add_tax == TRUE && !is.null(tax_table(physeq, errorIfNULL = F))){
+    prevdf <- cbind(prevdf, tax_table(physeq))
+  }
+  return(prevdf)
+}
+
+```
+
+Make sure we get representative genera from across time points given that samples from lab frogs are more common. This may cause a bias in genus selection.
+
+```{r}
+
+### 16S ##
+### 16S ##
+### 16S ##
+
+frog_phylum<- microbiome::aggregate_top_taxa(V4_rare, "Phylum", top = 20)
+
+taxtable<-data.frame(tax_table(frog_phylum))
+taxa_names(frog_phylum)<-taxtable$Phylum
+
+#### table
+
+lab_top<-subset_samples(frog_phylum, TimePoint == "T1 (lab)") %>% microbiome::transform("compositional")
+
+lab_prev<-prevalence(lab_top)
+lab_prev$Status<-"Lab"
+
+lab_prev_16S <- lab_prev %>% arrange(-TotalAbundance)
+head(lab_prev_16S, 20)
+
+
+wild_top<-subset_samples(frog_phylum, TimePoint != "T1 (lab)") %>% microbiome::transform("compositional")
+wild_prev<-prevalence(wild_top)
+wild_prev$Status<-"Wild"
+
+wild_prev_16S <- wild_prev %>% arrange(-TotalAbundance)
+head(wild_prev_16S, 15)
+
+
+
+## ITS ##
+## ITS ##
+## ITS ##
+
+frog_phylum<- microbiome::aggregate_top_taxa(ITS_rare, "Phylum", top = 20)
+
+taxtable<-data.frame(tax_table(frog_phylum))
+taxa_names(frog_phylum)<-taxtable$Phylum
+
+#### table
+
+lab_top<-subset_samples(frog_phylum, TimePoint == "T1 (lab)") %>% microbiome::transform("compositional")
+
+lab_prev<-prevalence(lab_top)
+lab_prev$Status<-"Lab"
+
+lab_prev_ITS <- lab_prev %>% arrange(-TotalAbundance)
+head(lab_prev_ITS)
+
+
+wild_top<-subset_samples(frog_phylum, TimePoint != "T1 (lab)") %>% microbiome::transform("compositional")
+wild_prev<-prevalence(wild_top)
+wild_prev$Status<-"Wild"
+
+wild_prev_ITS <- wild_prev %>% arrange(-TotalAbundance)
+head(wild_prev_ITS)
+
+
+```
+
+### Prevalence stats - Genus level
+
+
+```{r}
+
+V4_genus<-tax_glom(V4_rare, "Genus")
+
+V4_genus_T1 <-subset_samples(V4_genus, TimePoint == "T1 (lab)")
+V4_genus_T2 <-subset_samples(V4_genus, TimePoint == "T2")
+
+V4_genus_T3 <-subset_samples(V4_genus, TimePoint == "T3")
+
+#V4_genus_R <-subset_samples(V4_genus, TimePoint == "Rewilded")
+
+V4_prev_T1<-prevalence(V4_genus_T1)
+V4_prev_T2<-prevalence(V4_genus_T2)
+V4_prev_T3<-prevalence(V4_genus_T3)
+#V4_prev_R<-prevalence(V4_genus_R)
+
+V4_prev_T1<-V4_prev_T1%>%arrange(-Prevalence)
+V4_prev_T2<-V4_prev_T2%>%arrange(-Prevalence)
+V4_prev_T3<-V4_prev_T3%>%arrange(-Prevalence)
+#V4_prev_R<-V4_prev_R%>%arrange(-Prevalence)
+
+
+# top genera per group
+
+V4_top_genera_T1<- V4_prev_T1[1:12,]
+V4_top_genera_T1$Genus
+
+V4_top_genera_T2<- V4_prev_T2[1:12,]
+V4_top_genera_T2$Genus
+
+V4_top_genera_T3<- V4_prev_T3[1:12,]
+V4_top_genera_T3$Genus
+
+#V4_top_genera_R<- V4_prev_R[1:10,]
+#V4_top_genera_R$Genus
+
+
+V4_genera_to_keep<-unique(c(V4_top_genera_T1$Genus, V4_top_genera_T2$Genus, V4_top_genera_T3$Genus))
+
+V4_genera_to_keep<- V4_genera_to_keep[V4_genera_to_keep != "uncultured"]
+
+V4_genera_to_keep<- V4_genera_to_keep[V4_genera_to_keep != "uncultured bacterium"]
+
+V4_genera_to_keep
+
+############## ITS #####
+############## ITS #####
+############## ITS #####
+############## ITS #####
+
+
+ITS_genus<-tax_glom(ITS_rare, "Genus")
+
+ITS_genus_T1 <-subset_samples(ITS_genus, TimePoint == "T1 (lab)")
+ITS_genus_T2 <-subset_samples(ITS_genus, TimePoint == "T2")
+
+ITS_genus_T3 <-subset_samples(ITS_genus, TimePoint == "T3")
+
+#ITS_genus_R <-subset_samples(ITS_genus, TimePoint == "Rewilded")
+
+ITS_prev_T1<-prevalence(ITS_genus_T1)
+ITS_prev_T2<-prevalence(ITS_genus_T2)
+ITS_prev_T3<-prevalence(ITS_genus_T3)
+#ITS_prev_R<-prevalence(ITS_genus_R)
+
+ITS_prev_T1<-ITS_prev_T1%>%arrange(-Prevalence)
+ITS_prev_T2<-ITS_prev_T2%>%arrange(-Prevalence)
+ITS_prev_T3<-ITS_prev_T3%>%arrange(-Prevalence)
+#ITS_prev_R<-ITS_prev_R%>%arrange(-Prevalence)
+
+
+# top genera per group
+
+ITS_top_genera_T1<- ITS_prev_T1[1:12,]
+ITS_top_genera_T1$Genus
+
+ITS_top_genera_T2<- ITS_prev_T2[1:12,]
+ITS_top_genera_T2$Genus
+
+ITS_top_genera_T3<- ITS_prev_T3[1:12,]
+ITS_top_genera_T3$Genus
+
+
+
+ITS_genera_to_keep<-unique(c(ITS_top_genera_T1$Genus, ITS_top_genera_T2$Genus, ITS_top_genera_T3$Genus))
+
+ITS_genera_to_keep<- ITS_genera_to_keep[ITS_genera_to_keep != "uncultured"]
+
+ITS_genera_to_keep<- ITS_genera_to_keep[ITS_genera_to_keep != "Kingdom_Fungi"]
+
+ITS_genera_to_keep
+
+```
+
+
+#### Heat map
+
+```{r}
+
+
+# create a gradient color palette for abundance
+grad_ab <- colorRampPalette(c("#faf3dd","#f7d486" ,"#5e6472"))
+grad_ab <- colorRampPalette(c("mistyrose", "lightblue", "cadetblue", "navyblue"))
+grad_ab_pal <- grad_ab(10)
+#scales::show_col(grad_ab_pal)
+
+
+V4_top<-subset_taxa(V4_rare, Genus %in% V4_genera_to_keep)
+V4_top<-tax_glom(V4_top, "Genus")
+
+#V4_top<-subset_samples(V4_top, TimePoint != "Rewilded")
+
+ITS_top<-subset_taxa(ITS_rare, Genus %in% ITS_genera_to_keep)
+ITS_top<-tax_glom(ITS_top, "Genus")
+#ITS_top<-subset_samples(ITS_top, TimePoint != "Rewilded")
+
+# Define colors for each sample type
+# Specify colors
+
+pal<-pals::stepped3()[c(1,5,9,13)]
+pal[2]<-"violetred"
+#pal[3]<-"aquamarine4"
+pal
+ann_colors = list(
+  TimePoint = c(`T1 (lab)` = "#3182BD", T2 = "violetred", T3 = "#31A354"))
+
+
+###############
+###############
+###############
+###############
+
+taxa_names(V4_top)<-paste(abbreviate(V4_top@tax_table@.Data[,2],6), 1:length(taxa_names(V4_top)), sep = "")
+
+
+V4_top@tax_table@.Data[,6]<-abbreviate(V4_top@tax_table@.Data[,6],15)
+
+#he agglomeration method to be used. This should be (an unambiguous abbreviation of) one of "ward.D", "ward.D2", "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC).
+
+heatmap1<-plot_taxa_heatmap(V4_top,
+                            subset.top = 25,
+                            VariableA = c("TimePoint"),
+                            heatcolors = grad_ab_pal,
+                            annotation_colors= ann_colors,
+                            transformation = "log10",
+                            cluster_rows = T,
+                            cluster_cols = T,
+                            clustering_method = "ward.D2",
+                            show_colnames = F,
+                            fontsize = 8,
+                            cellwidth = 1.5, 
+                            cellheight = 8)
+
+
+## fungi
+
+taxa_names(ITS_top)<-paste(abbreviate(ITS_top@tax_table@.Data[,2],6), 1:length(taxa_names(ITS_top)), sep = "")
+
+
+ITS_top@tax_table@.Data[,6]<-abbreviate(ITS_top@tax_table@.Data[,6],15)
+
+
+heatmap2<-plot_taxa_heatmap(ITS_top,
+                            subset.top = 25,
+                            VariableA = c("TimePoint"),
+                            heatcolors = grad_ab_pal, 
+                            annotation_colors= ann_colors,
+                            transformation = "log10",
+                            cluster_rows = T,
+                            cluster_cols = T,
+                            clustering_method = "ward.D2",
+                            show_colnames = F,
+                            fontsize = 8,
+                            cellwidth = 1.5, 
+                            cellheight = 8)
+
+
+ggpubr::ggarrange(heatmap1$plot[[4]], heatmap2$plot[[4]],  ncol = 1, align = "v")
+
+
+
+```
+
+
+
+#### Merge ITS and 16S
+
+```{r}
+
+
+V4_samples<-sample_names(frog_16S)
+ITS_samples<-sample_names(frog_ITS)
+samples_to_keep<-intersect(V4_samples,ITS_samples)
+
+#frog_ITS<- frog_ITS %>% speedyseq::orient_taxa(as = "rows")
+
+
+frog_16S_sub<-prune_samples(samples_to_keep, frog_16S)
+frog_ITS_sub<-prune_samples(samples_to_keep, frog_ITS)
+
+# glom by genus and get list of most common taxa per dataset
+
+V4_genus<- tax_glom(frog_16S_sub, taxrank = "Genus")
+ITS_genus<- tax_glom(frog_ITS_sub, taxrank = "Genus")
+
+#subset(data.frame(tax_table(ITS_genus)), Class == "Chytridiomycetes")
+#########
+#########
+#########
+#########
+#########
+#########
+
+V4_top<-microbiome::aggregate_top_taxa(V4_genus, top = 26, level = "Genus")
+ITS_top<-microbiome::aggregate_top_taxa(ITS_genus, top = 26, level = "Genus")
+
+remove<-c("Other", "uncultured", "Kingdom_Fungi")
+
+V4_to_keep<-taxa_names(V4_top)[!taxa_names(V4_top)%in% remove]
+ITS_to_keep<-taxa_names(ITS_top)[!taxa_names(ITS_top)%in% remove]
+
+
+
+#################
+
+
+V4_clr <-microbiome::transform(V4_genus, transform = "clr")
+ITS_clr <-microbiome::transform(ITS_genus, transform = "clr")
+
+## filter taxa
+
+V4_clr<-subset_taxa(V4_clr, Genus %in% V4_to_keep)
+ITS_clr<-subset_taxa(ITS_clr, Genus %in% ITS_to_keep)
+
+## change names
+
+taxa_names(V4_clr)<- data.frame(tax_table(V4_clr))$Genus
+taxa_names(ITS_clr)<- data.frame(tax_table(ITS_clr))$Genus
+
+
+### make merged otu table 
+
+V4_otu<- data.frame(otu_table(V4_clr))
+ITS_otu<- data.frame(otu_table(ITS_clr))
+
+V4_otu[1:5,1:5]
+ITS_otu[1:5,1:5]
+
+names(V4_otu)<-sample_names(V4_clr)
+names(ITS_otu)<-sample_names(ITS_clr)
+
+full_otu<-rbind(V4_otu, ITS_otu)
+full_otu<-otu_table(full_otu, taxa_are_rows = T)
+
+# make merged tax table
+
+V4_tax<- data.frame(tax_table(V4_clr))
+ITS_tax<- data.frame(tax_table(ITS_clr))
+
+full_tax<-rbind(V4_tax, ITS_tax)
+full_tax2<-tax_table(full_tax)
+taxa_names(full_tax2)<- row.names(full_tax)
+colnames(full_tax2) <- c("Kingdom", "Phylum", "Class", 
+                         "Order", "Family", "Genus", "Species")
+
+
+### make merged metadata 
+
+metadataV4<-data.frame(sample_data(V4_clr))
+metadata<-sample_data(metadataV4)
+
+## merge
+
+merged_ps<-phyloseq(metadata, full_otu, full_tax2)
+head(tax_table(merged_ps))
+tail(tax_table(merged_ps))
+
+taxa_names(merged_ps)[1:25]<- paste("B", taxa_names(merged_ps)[1:25], sep = "_")
+taxa_names(merged_ps)[26:50]<- paste("F", taxa_names(merged_ps)[26:50], sep = "_")
+
+taxa_names(merged_ps)
+
+merged_ps
+
+```
+
+
+
+#### GLLVM: Effect of soft release on common genera
+
+```{r}
+
+
+######## JDSMs###########
+######## JDSMs###########
+######## JDSMs###########
+
+table(sample_data(merged_ps)$location)
+
+#merged_ps<-subset_samples(merged_ps, location != "E2")
+#merged_ps<-subset_samples(merged_ps, location != "Unknown")
+
+merged_ps
+
+############# data prep ###
+############# data prep ###
+############# data prep ###
+
+ys <- data.frame(t(otu_table(merged_ps)))
+names(ys) <-taxa_names(merged_ps)
+
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+
+Xs<-data.frame(sample_data(merged_ps))
+
+
+Xs$location<-factor(Xs$location)
+Xs$Status<-factor(Xs$Status, levels = c("Pre-release", "Post-release"))
+table(Xs$TimePoint)
+str(Xs)
+Xs$frog_id<-factor(Xs$frog_id)
+
+Xs$Wild<-ifelse(Xs$TimePoint == "T1 (lab)", "Lab", "Wild")
+Xs$Wild<-factor(Xs$Wild)
+
+
+table(Xs$Wild)
+
+# fit model
+
+
+fit <- gllvm(ys, Xs, 
+             num.lv = 2,
+             # formula = ~  TimePoint+location, 
+             formula = ~  Status, 
+             row.eff = ~(1|frog_id),
+             starting.val = "zero",
+             family = "gaussian")
+
+#plot(fit)
+#summary(fit)
+#AIC(fit)
+
+coefplot(fit, cex.ylab = 0.7)
+
+fit_null <- gllvm(ys,
+                  num.lv = 2,
+                  family = "gaussian")
+
+
+############################ extract for ggploting ####
+############################ extract for ggploting ####
+############################ extract for ggploting ####
+
+df<-coef(fit)
+
+est_df<-data.frame(df$Intercept)
+
+est_df2<-data.frame(df$Xcoef) # choose columns of interest
+
+est_df3<-merge(est_df, est_df2, by = 0)
+
+head(est_df3)
+
+
+
+# order genera
+
+row.names(est_df3)<-est_df3$Row.names
+est_df3<-est_df3[colnames(ys),]
+
+head(est_df3)
+
+#put est_df3 into long format
+
+names(est_df3)[1]<- "Genus"
+names(est_df3)[2]<- "Intercept"
+
+estimates_df <- gather(est_df3, Treatment, Estimate, names(est_df3)[2]:names(est_df3)[ncol(est_df3)], factor_key=TRUE)
+
+head(estimates_df )
+
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+
+
+confint_df<-data.frame(confint(fit))
+dim(confint_df)
+
+confint_df<-rbind(confint_df[rownames(confint_df) %like% "Xcoef", ],
+                  confint_df[rownames(confint_df) %like% "Intercept", ])
+
+head(confint_df)
+
+# add a column with correct variable level
+variables<- colnames(est_df3)[3:ncol(est_df3)]
+variables<-c(variables, "Intercept")
+variables1<-rep(variables, nrow(est_df))
+variables2<-variables1[order(match(variables1, variables))]
+
+#confint_df$Treatment<-c(rep("UU", 40), rep("CU", 40), rep("UC", 40), rep("CC", 40))
+confint_df$Treatment<-variables2
+
+
+# column with taxa names. Should be automatically in the correct order but double check
+
+confint_df$Genus<-rep(colnames(ys), length(unique(confint_df$Treatment)))
+
+
+
+# now have estimates, confidence intervals, aas seperate data frames, but they are in different formats. Need to massage them into one dataframe for plotting.
+
+merged<-merge(estimates_df, confint_df, by = c("Treatment", "Genus"))
+
+
+final_estimates_reduced<- merged
+names(final_estimates_reduced)[4]<-"CI_lower"
+names(final_estimates_reduced)[5]<-"CI_upper"
+
+#final_estimates<- merged[,c(1,2,3,7,8)]
+head(final_estimates_reduced)
+unique(final_estimates_reduced$Treatment)
+
+## add significance
+
+final_estimates_reduced$Sig<- !data.table::between(0, final_estimates_reduced$CI_lower, final_estimates_reduced$CI_upper)
+
+
+final_estimates_reduced$Genus<-factor(final_estimates_reduced$Genus)
+
+levels(final_estimates_reduced$Treatment)
+
+final_estimates_reduced$Treatment<-factor(final_estimates_reduced$Treatment)
+levels(final_estimates_reduced$Treatment)<-c("Pre-release", "Post-release")
+
+final_estimates_reduced2<-subset(final_estimates_reduced, Treatment == "Post-release")
+
+final_estimates_reduced2$Genus2<-abbreviate(final_estimates_reduced2$Genus, minlength = 20 )
+
+head(final_estimates_reduced2)
+
+final_estimates_reduced2 <- final_estimates_reduced2  %>%
+  mutate(Kingdom = ifelse(substr(Genus, 1, 1) == "B", "Bacteria", "Fungi"))
+
+P1<-ggplot(subset(final_estimates_reduced2, Kingdom == "Bacteria"), aes(y = reorder(Genus2, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  # facet_wrap(~Kingdom, nrow = 2, scales = "free_y")  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "cadetblue"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(1,0.2, 0.2, 0.6),"cm"))+
+  theme( strip.background = element_blank(),
+         strip.text.x = element_blank())+
+  theme(axis.title.x = element_blank())
+
+P2<-ggplot(subset(final_estimates_reduced2, Kingdom == "Fungi"), aes(y = reorder(Genus2, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  # facet_wrap(~Kingdom, nrow = 2, scales = "free_y")  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "cadetblue"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(1,0.2, 0.2, 0.6),"cm"))+
+  theme( strip.background = element_blank(),
+         strip.text.x = element_blank())+
+  xlab("Estimate \n <~Pre-release vs Post-release~>")
+
+ggarrange(P1, P2, ncol = 1, labels = c("a) Bacteria", "b) Fungi"), heights = c(1, 1.15))
+
+```
+
+
+
+## Alpha diversity analysis
+
+#### Alpha diversity: effect of soft release
+
+```{r}
+
+################ alpha diversity ##############
+################ alpha diversity ##############
+################ alpha diversity ##############
+################ alpha diversity ##############
+
+sample_data(V4_rare)$Observed<-estimate_richness(V4_rare, split = TRUE, measures = c("Observed"))$Observed
+sample_data(ITS_rare)$Observed<-estimate_richness(ITS_rare, split = TRUE, measures = c("Observed"))$Observed
+
+sample_data(V4_rare)$Shannon<-estimate_richness(V4_rare, split = TRUE, measures = c("Shannon"))$Shannon
+sample_data(ITS_rare)$Shannon<-estimate_richness(ITS_rare, split = TRUE, measures = c("Shannon"))$Shannon
+
+#rewilded_ps<-subset_samples(V4_rare, location == "Rewilded")
+
+pal<-pals::stepped3()[c(1,5,9,13)]
+pal[2]<-"violetred"
+#pal[3]<-"aquamarine4"
+
+
+alpha1<-ggplot(sample_data(V4_rare), aes(y = Observed, x = TimePoint, col = TimePoint, fill = TimePoint))+
+  geom_boxplot(alpha = 0.5, col = "black")+
+  geom_jitter( pch = 21, size = 2, width = 0.1)+
+  geom_line(aes(group = frog_id), alpha = 0.6, col = "grey")+
+  theme_bw()+
+  xlab("Time point")+
+  ylab("Bacterial ASV diversity")+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)
+
+
+alpha2<-ggplot(sample_data(ITS_rare), aes(y = Observed, x = TimePoint, col = TimePoint, fill = TimePoint))+
+  geom_boxplot( alpha = 0.5, col = "black")+
+  geom_jitter( pch = 21, size = 2, width = 0.1)+
+  geom_line(aes(group = frog_id), alpha = 0.6, col = "grey")+
+  theme_bw()+
+  xlab("Time point")+
+  ylab("Fungal ASV diversity")+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)
+
+
+ggarrange(alpha1, alpha2, ncol = 2, common.legend = T)
+
+
+
+shannon_16S<-ggplot(sample_data(V4_rare), aes(y = Shannon, x = TimePoint))+
+  geom_boxplot(fill = "skyblue")+
+  geom_point()+
+  geom_line(aes(group = frog_id), alpha = 0.5)+
+  theme_bw()+
+  ylab("Shannon diversity")
+
+shannon_ITS<-ggplot(sample_data(ITS_rare), aes(y = Shannon, x = TimePoint))+
+  geom_boxplot(fill = "skyblue")+
+  geom_point()+
+  geom_line(aes(group = frog_id), alpha = 0.5)+
+  theme_bw()+
+  ylab("Shannon diversity")
+
+ggarrange(shannon_16S, shannon_ITS)
+
+
+### correlations ####
+### correlations ####
+### correlations ####
+### correlations ####
+
+metadata_16S<-data.frame(sample_data(V4_rare))
+metadata_16S<-subset(metadata_16S, location != "Unknown"& location != "E2" & location != "E5")
+
+metadata_ITS<-data.frame(sample_data(ITS_rare))
+metadata_ITS<-subset(metadata_ITS, location != "Unknown"& location != "E2" & location != "E5")
+
+
+
+names(metadata_16S)
+names(metadata_ITS)
+alpha_merged<-merge(metadata_16S[,c(1,3,7,9,14,15)], metadata_ITS[,c(1,14,15)], by = "feature.id")
+
+head(alpha_merged)
+alpha_merged$feature.id
+names(alpha_merged)
+
+names(alpha_merged)[5]<-"Seq_depth_V4"
+names(alpha_merged)[6]<-"Observed_V4"
+
+names(alpha_merged)[7]<-"Seq_depth_ITS"
+names(alpha_merged)[8]<-"Observed_ITS"
+
+cor_plot<-ggplot(alpha_merged, aes(x = Observed_V4, y = Observed_ITS))+
+  geom_line(aes(group = frog_id), col = "lightgrey")+
+  geom_point( aes(fill = TimePoint), size = 3, pch = 21, col = "darkgrey")+
+  scale_fill_brewer(palette = "Paired")+
+  theme_bw()+
+  xlab("Bacterial ASV diversity")+
+  ylab("Fungal ASV diversity")+
+  labs(fill = "Time point")+
+  labs(color = "Time point")+
+  geom_smooth(method = "lm",  aes(col = TimePoint), se = F)+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)
+
+
+cor_plot
+
+
+
+ggarrange(alpha1, alpha2,cor_plot, ncol = 3, common.legend = T, legend = "right", labels = c("a)", "b)", "c)"))
+
+
+```
+
+### Alpha statistics
+
+```{r}
+
+## statistics
+
+metadata_16S<-data.frame(sample_data(V4_rare))
+names(metadata_16S)
+dim(metadata_16S)
+
+
+detach(package:plyr)
+
+metadata_16S %>% group_by(Status) %>% summarize(mean = mean(Observed))
+
+##############
+
+center <-  function(x) {
+  scaled_values <- x - mean(x)
+  return(scaled_values)
+}
+
+metadata_16S$frog_id<-factor(metadata_16S$frog_id)
+metadata_16S$location<-factor(metadata_16S$location)
+metadata_16S$Observed_scaled<- as.numeric(center(metadata_16S$Observed))
+metadata_16S$Seq_depth_scaled<- as.numeric(scale(metadata_16S$Seq_depth))
+
+
+### fit models ##
+### fit models ##
+### fit models ##
+
+m_alpha_16S<- glmmTMB(Observed ~ Status  + Seq_depth_scaled + (1|frog_id), data = metadata_16S)
+
+m_alpha_16S2<- glmmTMB(Observed ~ TimePoint  +Seq_depth_scaled+ (1|frog_id), data = metadata_16S)
+
+m_alpha_16S3<- glmmTMB(Observed ~ location  +Seq_depth_scaled+ (1|frog_id), data = metadata_16S)
+
+
+sjPlot::tab_model(m_alpha_16S)
+sjPlot::tab_model(m_alpha_16S2)
+sjPlot::plot_model(m_alpha_16S)
+sjPlot::plot_model(m_alpha_16S3)
+
+summary(m_alpha_16S2)
+
+## shannon ##
+
+shannon_v4<- glmmTMB(Shannon ~ Status  + Seq_depth_scaled + (1|frog_id), data = metadata_16S)
+
+summary(shannon_v4)
+
+
+########### ITS #######
+########### ITS #######
+########### ITS #######
+########### ITS #######
+
+metadata_ITS<-data.frame(sample_data(ITS_rare))
+
+metadata_ITS %>% group_by(Status) %>% summarize(mean = mean(Observed))
+
+metadata_ITS$frog_id<-factor(metadata_ITS$frog_id)
+metadata_ITS$location<-factor(metadata_ITS$location)
+metadata_ITS$Observed_scaled<- as.numeric(scale(metadata_ITS$Observed))
+metadata_ITS$Seq_depth_scaled<- as.numeric(scale(metadata_ITS$Seq_depth))
+
+###### fit models ###
+###### fit models ###
+###### fit models ###
+
+m_alpha_ITS<- glmmTMB(Observed ~ Status  + Seq_depth_scaled+ (1|frog_id), data = metadata_ITS)
+
+summary(m_alpha_ITS)
+
+sjPlot::tab_model(m_alpha_ITS)
+
+
+m_alpha_ITS2<- glmmTMB(Observed ~ TimePoint  + Seq_depth_scaled+ (1|frog_id), data = metadata_ITS)
+
+sjPlot::tab_model(m_alpha_ITS2)
+plot_model(m_alpha_ITS2)
+
+metadata_ITS$Observed_predicted<- stats::predict(m_alpha_ITS2, new_data = new_data)
+
+## shannon
+
+shannon_ITS<- glmmTMB(Shannon ~ Status  + Seq_depth_scaled + (1|frog_id), data = metadata_ITS)
+
+summary(shannon_ITS)
+sjPlot::tab_model(shannon_ITS)
+sjPlot::tab_model(shannon_v4)
+
+#### correlation ###
+#### correlation ###
+#### correlation ###
+#### correlation ###
+
+
+head(alpha_merged)
+
+alpha_cor_model<- glmmTMB(Observed_V4 ~ Observed_ITS + (1|frog_id), data = alpha_merged)
+
+sjPlot::tab_model(alpha_cor_model)
+
+summary(alpha_cor_model)
+
+
+```
+
+
+## Beta diversity analysis
+
+#### Beta diversity: 16S
+
+```{r}
+
+#############
+
+V4_rare_sub<- V4_rare
+#V4_rare_sub<- subset_samples(V4_rare, location != "Unknown"& location != "R2" & TimePoint != "T1 (lab)")
+
+
+
+wunifrac_dist<-distance(V4_rare_sub, method = "wunifrac")
+otutable<-data.frame(t(V4_rare_sub@otu_table@.Data))
+metadata <- data.frame(sample_data(V4_rare_sub))
+names(metadata)
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+location <-metadata$location
+time_point <-metadata$TimePoint
+treatment <-metadata$treatment
+
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        #  location+
+                        time_point+
+                        #  treatment+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+final_model$CCA$rank
+
+
+
+# Note: including mass reduces effect of treatment - mechanism?
+
+# weighted unifrac
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(V4_rare_sub))[,c("feature.id", "TimePoint", "frog_id")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+#centroids_df<-centroids_df[1:6,]
+centroids_df
+row.names(centroids_df)<-c("T1 (lab)", "T2", "T3" )
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac1<-vectors_df
+centroids_wunifrac1<-centroids_df
+
+# colour palette
+pal<-pals::stepped3()[c(1,5,9,13)]
+pal[2]<-"violetred"
+
+
+str(vectors_wunifrac1)
+
+V4_timepoint<-ggplot(vectors_wunifrac1, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = TimePoint), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =TimePoint), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  
+  theme_bw()+
+  geom_line(aes(group = frog_id), alpha = 0.2)+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  # add arrows
+  
+  geom_segment(data=centroids_wunifrac1, aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+               arrow = arrow(length = unit(0.5, "cm"), type = "closed"), lwd = 1,  col = "black")+
+  ggrepel::geom_label_repel(data=centroids_wunifrac1,  
+                            alpha = 0.9, col = "black", size = 4, fill = "yellow", 
+                            aes(CAP1, CAP2, label = row.names(centroids_wunifrac1)))+
+  
+  theme_light(base_size = 12)+
+  ggtitle("a) Bacteria: Time point")+
+  labs(fill = "Time point", col = "Time point")
+
+V4_timepoint
+
+##### location ######
+##### location ######
+##### location ######
+##### location ######
+
+
+final_model2<-capscale(wunifrac_dist ~ 
+                         location+
+                         # time_point+
+                         Seq_depth,
+                       env = metadata, 
+                       comm = otutable) 
+
+
+# Note: including mass reduces effect of treatment - mechanism?
+
+# weighted unifrac
+
+anova_wunifrac<-anova.cca(final_model2, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model2)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(V4_rare_sub))[,c("feature.id", "location", "frog_id")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+#centroids_df<-centroids_df[1:6,]
+centroids_df
+centroids_df<-centroids_df[1:4,]
+row.names(centroids_df)<-c("E1","E2", "E3", "Lab" )
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac2<-vectors_df
+centroids_wunifrac2<-centroids_df
+
+
+
+V4_location<-ggplot(vectors_wunifrac2, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = location), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =location), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  
+  theme_bw()+
+  geom_line(aes(group = frog_id), alpha = 0.2)+
+  
+  scale_fill_viridis(discrete = TRUE, direction = -1)+
+  scale_color_viridis(discrete = TRUE, direction = -1)+
+  
+  # add arrows
+  
+  geom_segment(data=centroids_wunifrac2, aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+               arrow = arrow(length = unit(0.5, "cm"), type = "closed"), lwd = 1,  col = "black")+
+  ggrepel::geom_label_repel(data=centroids_wunifrac2,  
+                            alpha = 0.9, col = "black", size = 4, fill = "yellow", 
+                            aes(CAP1, CAP2, label = row.names(centroids_wunifrac2)))+
+  
+  theme_light(base_size = 12)+
+  ggtitle("c) Bacteria: Enclosure")+
+  labs(fill = "Enclosure", col = "Enclosure")
+
+V4_location
+
+```
+
+#### Beta diversity: ITS
+
+```{r}
+
+ITS_rare_sub<- subset_samples(ITS_rare, location != "Unknown")
+#ITS_rare_sub<- subset_samples(ITS_rare, location != "Unknown"& location != "R2" & TimePoint != "T1 (lab)")
+
+
+wunifrac_dist<-distance(ITS_rare_sub, method = "wunifrac")
+otutable<-data.frame(t(ITS_rare_sub@otu_table@.Data))
+metadata <- data.frame(sample_data(ITS_rare_sub))
+names(metadata)
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+location <-metadata$location
+time_point <-metadata$TimePoint
+
+
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        #  location+
+                        time_point+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+
+
+# Note: including mass reduces effect of treatment - mechanism?
+
+# weighted unifrac
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ITS_rare_sub))[,c("feature.id", "TimePoint", "frog_id")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+#centroids_df<-centroids_df[1:6,]
+centroids_df
+row.names(centroids_df)<-c("T1 (lab)", "T2", "T3" )
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac3<-vectors_df
+centroids_wunifrac3<-centroids_df
+
+# colour palette
+#pal<-pals::stepped3()[c(1,5,9,13)]
+#pal<-pals::tol()[c(1,3,4,12)]
+
+
+
+ITS_timepoint<-ggplot(vectors_wunifrac3, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = TimePoint), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =TimePoint), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  geom_line(aes(group = frog_id), alpha = 0.2)+
+  
+  theme_bw()+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  # add arrows
+  
+  geom_segment(data=centroids_wunifrac3, aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+               arrow = arrow(length = unit(0.5, "cm"), type = "closed"), lwd = 1,  col = "black")+
+  ggrepel::geom_label_repel(data=centroids_wunifrac3,  
+                            alpha = 0.9, col = "black", size = 4, fill = "yellow", 
+                            aes(CAP1, CAP2, label = row.names(centroids_wunifrac3)))+
+  
+  theme_light(base_size = 12)+
+  ggtitle("b) Fungi: Time point")+
+  labs(fill = "Time point", col = "Time point")
+
+ITS_timepoint
+
+##### location ######
+##### location ######
+##### location ######
+##### location ######
+
+
+final_model2<-capscale(wunifrac_dist ~ 
+                         location+
+                         # time_point+
+                         Seq_depth,
+                       env = metadata, 
+                       comm = otutable) 
+
+
+# Note: including mass reduces effect of treatment - mechanism?
+
+# weighted unifrac
+
+anova_wunifrac<-anova.cca(final_model2, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model2)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ITS_rare_sub))[,c("feature.id", "location", "frog_id")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+centroids_df<-centroids_df[1:4,]
+centroids_df
+row.names(centroids_df)<-c("E1","E2", "E3",  "Lab" )
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac4<-vectors_df
+centroids_wunifrac4<-centroids_df
+
+
+
+ITS_location<-ggplot(vectors_wunifrac4, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = location), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =location), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  geom_line(aes(group = frog_id), alpha = 0.2)+
+  
+  theme_bw()+
+  scale_fill_viridis(discrete = TRUE, direction = -1)+
+  scale_color_viridis(discrete = TRUE, direction = -1)+
+  
+  # add arrows
+  
+  geom_segment(data=centroids_wunifrac4, aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+               arrow = arrow(length = unit(0.5, "cm"), type = "closed"), lwd = 1,  col = "black")+
+  ggrepel::geom_label_repel(data=centroids_wunifrac4,  
+                            alpha = 0.9, col = "black", size = 4, fill = "yellow", 
+                            aes(CAP1, CAP2, label = row.names(centroids_wunifrac4)))+
+  
+  theme_light(base_size = 12)+
+  ggtitle("d) Fungi: Enclosure")+
+  labs(fill = "Enclosure", col = "Enclosure")
+
+
+
+# plot together
+beta1<-ggarrange(V4_timepoint, ITS_timepoint, common.legend = T, legend = "right")
+
+beta2<-ggarrange(V4_location, ITS_location, common.legend = T, legend = "right")
+
+ggarrange(beta1, beta2, ncol = 1)
+
+```
+
+## Network analysis
+
+#### Residual correlation plot
+
+```{r}
+
+
+merged_ps
+
+############# data prep ###
+############# data prep ###
+############# data prep ###
+
+ys <- data.frame(t(otu_table(merged_ps)))
+names(ys) <-taxa_names(merged_ps)
+
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+Xs<-data.frame(sample_data(merged_ps))
+
+Xs$location<-factor(Xs$location)
+Xs$Status<-factor(Xs$Status, levels = c("Pre-release", "Post-release"))
+table(Xs$TimePoint)
+str(Xs)
+Xs$frog_id<-factor(Xs$frog_id)
+
+Xs$Wild<-ifelse(Xs$TimePoint == "T1 (lab)", "Lab", "Wild")
+Xs$Wild<-factor(Xs$Wild)
+
+
+table(Xs$Wild)
+
+# fit model
+
+#hist(ys$B_Leucobacter)
+
+fit <- gllvm(ys, Xs, 
+             num.lv = 2,
+             formula = ~  TimePoint+location, 
+             # row.eff = ~(1|frog_id),
+             starting.val = "zero",
+             family = "gaussian")
+
+coefplot(fit)
+
+### residual correlation
+
+cr1<-data.frame(getResidualCor(fit))#
+#cr1<-data.frame(getResidualCor(fit_null))#
+#cr1<-data.frame(getResidualCov(fit))#
+
+names(cr1)<-names(data.frame(ys))
+names(cr1)<-abbreviate(names(cr1), minlength = 15)
+
+row.names(cr1)<-names(data.frame(ys))
+rownames(cr1)<-abbreviate(rownames(cr1), minlength = 15 )
+
+cr2<-cor_pmat(cr1)
+
+#library(ggcorrplot)
+
+# Regions coloured in dark blue in correlation plot indicate 
+# clusters of species that are positively correlated with each other, 
+#after controlling for (co)variation in species explained by 
+#environmental terms
+
+corplot1<-ggcorrplot(cr1, 
+                     hc.order = F,
+                     outline.col = "white",
+                     type = "full",
+                     ggtheme = ggplot2::theme_minimal,
+                     tl.cex = 7.5,
+                     p.mat = cr2,
+                     sig.level = 0.01,
+                     #show.diag = F,
+                     insig = "blank",
+                     #  colors = c("#6D9EC1", "white", "#E46726"))
+                     colors = c("blue", "white", "red"))+
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5))+
+  theme(plot.margin=unit(c(1,1,1,1),"cm"))+
+  geom_vline(xintercept = 25.5)+
+  geom_hline(yintercept = 25.5)
+# annotate("rect", xmin = 21.5, xmax = 22.5, ymin = 0, ymax = 50.5,
+#  alpha = .5,fill = NA, col = "black", linetype = "dashed")
+
+corplot1
+
+###### null model ###
+###### null model ###
+###### null model ###
+fit_null <- gllvm(ys,
+                  num.lv = 2,
+                  starting.val = "zero",
+                  family = "gaussian")
+
+
+# amount of variation explained by TimePoint
+
+rcov <- getResidualCov(fit, adjust = 0)
+rcov0 <- getResidualCov(fit_null, adjust = 0)
+rcov0$trace; rcov$trace
+1 - rcov$trace / rcov0$trace
+
+#The ratio of traces suggests that environmental variables explain approximately 68% of the (co)variation in microbial species abundances.
+
+cr1_null<-data.frame(getResidualCor(fit_null))#
+#cr1<-data.frame(getResidualCor(fit_null))#
+#cr1<-data.frame(getResidualCov(fit))#
+
+names(cr1_null)<-names(data.frame(ys))
+names(cr1_null)<-abbreviate(names(cr1_null), minlength = 15)
+
+row.names(cr1_null)<-names(data.frame(ys))
+rownames(cr1_null)<-abbreviate(rownames(cr1_null), minlength = 15 )
+
+cr2_null<-cor_pmat(cr1_null)
+
+#library(ggcorrplot)
+
+# Regions coloured in dark blue in correlation plot indicate 
+# clusters of species that are positively correlated with each other, 
+#after controlling for (co)variation in species explained by 
+#environmental terms
+
+ggcorrplot(cr1_null, 
+           hc.order = F,
+           outline.col = "white",
+           type = "full",
+           ggtheme = ggplot2::theme_minimal,
+           tl.cex = 7.5,
+           p.mat = cr2_null,
+           sig.level = 0.01,
+           #show.diag = F,
+           insig = "blank",
+           #  colors = c("#6D9EC1", "white", "#E46726"))
+           colors = c("blue", "white", "red"))+
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5))+
+  theme(plot.margin=unit(c(1,1,1,1),"cm"))+
+  geom_vline(xintercept = 25.5)+
+  geom_hline(yintercept = 25.5)
+
+```
+
+#### Network figure
+
+```{r}
+dim(cr1)
+
+corplot2<-ggcorrplot(cr1, 
+                     hc.order = F,
+                     outline.col = "white",
+                     type = "lower",
+                     ggtheme = ggplot2::theme_minimal,
+                     tl.cex = 7.5,
+                     p.mat = cr2,
+                     sig.level = 0.01,
+                     #show.diag = F,
+                     insig = "blank",
+                     # colors = c("#6D9EC1", "white", "#E46726"))
+                     colors = c("blue", "white", "red"))+
+  # theme(axis.text.x = element_text(angle = 90, vjust=0.5))+
+  theme(plot.margin=unit(c(0.5,0.5,0.5,0.5),"cm"))+
+  geom_vline(xintercept = 25.5)+
+  geom_hline(yintercept = 25.5)
+
+
+
+### generate network data
+
+edge_data<-corplot2$data
+
+
+vertex_data<- data.frame(unique(c(edge_data$Var1,edge_data$Var2)))
+names(vertex_data)[1]<-"name"
+
+vertex_data$Kingdom<- ifelse(grepl('F_', vertex_data$name), "Fungi", "Bacteria")
+
+edge_data<-subset(edge_data, signif == 1)
+edge_data<-subset(edge_data, value != 1)
+edge_data<-edge_data[,c(1:3)]
+names(edge_data)<-c("To", "From", "cor")
+
+edge_data$weight2 <- abs(edge_data$cor)
+edge_data$dir <- ifelse(edge_data$cor<0, "Neg", "Pos")
+edge_data$weight<- as.numeric(rescale(edge_data$cor, c(0.01,0.2)))
+
+
+g <- graph_from_data_frame(edge_data, directed = F, vertices = vertex_data)
+
+
+n<-ggnetwork::fortify(g, layout = igraph::with_fr())
+
+head(n)
+
+n_full<-n
+
+
+network<-ggplot(n_full, aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_edges( aes(col = dir, alpha = weight2)) +
+  theme_blank()+
+  geom_nodes(aes(fill = Kingdom), pch = 21,  size = 5, col = "white")+
+  scale_fill_manual(values = c("gold", "deepskyblue3"))+
+  scale_color_manual(values = c("blue", "red"))+
+  labs(col = "Direction")+
+  theme(plot.margin=unit(c(2,1,1,1),"cm"))+
+  guides(alpha = "none")+
+  theme(legend.key.height = unit(0.005, "cm"))+
+  theme(legend.position = c(0.9,0.98))+
+  theme(legend.background = element_rect(fill="lightblue",
+                                         linewidth=0.5, 
+                                         linetype="solid", 
+                                         colour ="lightblue"))
+
+ggarrange(corplot1, network, ncol = 2, 
+          labels = c("a)", "b)"), widths = c(1.5,1))
+
+
+edge_data$weight<- as.numeric(rescale(edge_data$cor, c(0.01,0.05)))
+
+
+network1<-ggplot(n_full, aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_edges( aes(col = dir, alpha = weight2)) +
+  theme_blank()+
+  geom_nodes(aes(fill = Kingdom), pch = 21,  size = 5, col = "white")+
+  scale_fill_manual(values = c("gold", "skyblue"))+
+  scale_color_manual(values = c("blue", "red"))+
+  labs(col = "Direction")+
+  theme(plot.margin=unit(c(2,1,1,1),"cm"))+
+  guides(alpha = "none")+
+  theme(legend.key.height = unit(0.005, "cm"))+
+  theme(legend.position = c(0.05,0.1))+
+  theme(legend.background = element_rect(fill="lightblue",
+                                         linewidth=0.5, 
+                                         linetype="solid", 
+                                         colour ="lightblue"))+
+  geom_label(aes(label = name, fill = Kingdom), size = 2)
+
+
+ggarrange(corplot1, network1, ncol = 2, 
+          labels = c("a)", "b)"), widths = c(1.5,1))
+
+
+```
+
+
+#### Seperate networks for lab and wild frogs
+
+```{r}
+
+View(sample_data(merged_ps))
+
+lab_ps<- subset_samples(merged_ps, Status == "Pre-release")
+wild_ps<- subset_samples(merged_ps, Status == "Post-release")
+
+# lab samples
+
+ys <- data.frame(t(otu_table(lab_ps)))
+names(ys) <-taxa_names(lab_ps)
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+
+fit_null <- gllvm(ys,
+                  num.lv = 2,
+                  family = "gaussian",
+                  starting.val = "zero")
+
+cr1<-data.frame(getResidualCor(fit_null))#
+
+
+names(cr1)<-names(data.frame(ys))
+names(cr1)<-abbreviate(names(cr1), minlength = 15)
+
+row.names(cr1)<-names(data.frame(ys))
+rownames(cr1)<-abbreviate(rownames(cr1), minlength = 15 )
+
+cr2<-cor_pmat(cr1)
+
+
+ggcorrplot(cr1, 
+           hc.order = F,
+           outline.col = "white",
+           type = "full",
+           ggtheme = ggplot2::theme_minimal,
+           tl.cex = 7.5,
+           p.mat = cr2,
+           sig.level = 0.01,
+           #show.diag = F,
+           insig = "blank",
+           #  colors = c("#6D9EC1", "white", "#E46726"))
+           colors = c("blue", "white", "red"))+
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5))+
+  theme(plot.margin=unit(c(1,1,1,1),"cm"))+
+  geom_vline(xintercept = 25.5)+
+  geom_hline(yintercept = 25.5)
+
+
+
+################### wild samples ###############
+################### wild samples ###############
+################### wild samples ###############
+
+ys <- data.frame(t(otu_table(wild_ps)))
+names(ys) <-taxa_names(wild_ps)
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+
+fit_null <- gllvm(ys,
+                  num.lv = 2,
+                  family = "gaussian",
+                  starting.val = "zero")
+
+cr1<-data.frame(getResidualCor(fit_null))#
+
+
+names(cr1)<-names(data.frame(ys))
+names(cr1)<-abbreviate(names(cr1), minlength = 15)
+
+row.names(cr1)<-names(data.frame(ys))
+rownames(cr1)<-abbreviate(rownames(cr1), minlength = 15 )
+
+cr2<-cor_pmat(cr1)
+
+
+ggcorrplot(cr1, 
+           hc.order = F,
+           outline.col = "white",
+           type = "full",
+           ggtheme = ggplot2::theme_minimal,
+           tl.cex = 7.5,
+           p.mat = cr2,
+           sig.level = 0.01,
+           #show.diag = F,
+           insig = "blank",
+           #  colors = c("#6D9EC1", "white", "#E46726"))
+           colors = c("blue", "white", "red"))+
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5))+
+  theme(plot.margin=unit(c(1,1,1,1),"cm"))+
+  geom_vline(xintercept = 25.5)+
+  geom_hline(yintercept = 25.5)
+
+```
+
+# Effect of carotenoid treatment
+
+
+
+### Beta diversity: lab samples
+
+```{r}
+ps_lab_V4 <- subset_samples(V4_rare, TimePoint == "T1 (lab)")
+ps_lab_ITS <- subset_samples(ITS_rare, TimePoint == "T1 (lab)")
+
+```
+
+```{r}
+####
+
+wunifrac_dist<-distance(ps_lab_V4, method = "wunifrac")
+otutable<-data.frame(t(ps_lab_V4@otu_table@.Data))
+metadata <- data.frame(sample_data(ps_lab_V4))
+names(metadata)
+
+ggplot(metadata, aes(y = mass, x = clutch))+geom_boxplot()+geom_point()
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+treatment <-metadata$treatment
+clutch <- metadata$clutch
+mass<-metadata$mass
+summary(mass)
+
+names(metadata)
+
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        
+                        treatment+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ps_lab_V4))[,c("feature.id", "treatment")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+#centroids_df<-centroids_df[1:6,]
+centroids_df
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac1<-vectors_df
+centroids_wunifrac1<-centroids_df
+
+# colour palette
+pal<-pals::stepped3()[c(1,5,9,13)]
+#pal<-pals::tol()[c(1,3,4,12)]
+
+
+p1<- ggplot(vectors_wunifrac1, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = treatment, col = treatment), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =treatment), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  theme_bw()+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  theme_light(base_size = 12)+
+  labs(fill = "Carot. treatment", col = "Carot. treatment")
+
+
+####### ITS ##########
+####### ITS ##########
+####### ITS ##########
+####### ITS ##########
+
+
+####
+
+wunifrac_dist<-distance(ps_lab_ITS, method = "wunifrac")
+otutable<-data.frame(t(ps_lab_ITS@otu_table@.Data))
+metadata <- data.frame(sample_data(ps_lab_ITS))
+names(metadata)
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+treatment <-metadata$treatment
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        treatment+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+
+
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ps_lab_V4))[,c("feature.id", "treatment")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+
+
+centroids_df<-data.frame(final_model_df$centroids)
+centroids_df
+
+
+###########
+###########
+###########
+###########
+
+vectors_wunifrac2<-vectors_df
+centroids_wunifrac2<-centroids_df
+
+pal<-pals::stepped3()[c(1,5,9,13)]
+
+
+p2<- ggplot(vectors_wunifrac2, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = treatment, col = treatment), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =treatment), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  
+  theme_bw()+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  theme_light(base_size = 12)+
+  labs(fill = "Carot. treatment", col = "Carot. treatment")
+
+
+
+ggarrange(p1, p2, ncol = 2, common.legend = T, legend = "right", labels = c("a) Bacteria", "b) Fungi"))
+
+```
+
+
+### Alpha diversity: lab samples
+```{r}
+
+
+sample_data(ps_lab_V4)$Observed<-estimate_richness(ps_lab_V4, split = TRUE, measures = c("Observed"))$Observed
+
+sample_data(ps_lab_ITS)$Observed<-estimate_richness(ps_lab_ITS, split = TRUE, measures = c("Observed"))$Observed
+
+
+p3<-ggplot(sample_data(ps_lab_V4), aes(y = Observed, x = treatment))+
+  geom_boxplot(fill = "skyblue")+
+  geom_jitter(width = 0.2)+
+  xlab("Treatment")+
+  ylab("Bacterial ASV div.")+
+  theme_light(base_size = 12)
+
+p4<- ggplot(sample_data(ps_lab_ITS), aes(y = Observed, x = treatment))+
+  geom_boxplot(fill = "skyblue")+
+  geom_jitter(width = 0.2)+
+  xlab("Treatment")+
+  ylab("Fungal ASV div.")+
+  theme_light(base_size = 12)
+
+
+ggarrange(p3, p4, p1, p2, ncol = 2, nrow = 2, common.legend = T, labels = c("a)", "b)", "c)", "d)"), legend = "bottom")
+
+
+### statistics
+
+metadata_lab_V4<-data.frame(sample_data(ps_lab_V4))
+
+head(metadata_lab_V4)
+
+
+model_16s_lab<- glmmTMB::glmmTMB(Observed~treatment + Seq_depth, data = metadata_lab_V4)
+summary(model_16s_lab)
+
+
+metadata_lab_ITS<-data.frame(sample_data(ps_lab_ITS))
+
+model_ITS_lab<- glmmTMB::glmmTMB(Observed~treatment + Seq_depth, data = metadata_lab_ITS)
+summary(model_ITS_lab)
+
+
+
+```
+
+
+### Beta diversity: Rewilded samples
+
+
+```{r}
+
+ps_wild_V4 <- subset_samples(V4_rare, TimePoint != "T1 (wild)")
+ps_wild_ITS <- subset_samples(ITS_rare, TimePoint != "T1 (wild)")
+
+####
+
+wunifrac_dist<-distance(ps_wild_V4, method = "wunifrac")
+otutable<-data.frame(t(ps_wild_V4@otu_table@.Data))
+metadata <- data.frame(sample_data(ps_wild_V4))
+names(metadata)
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+treatment <-metadata$treatment
+time_point<-metadata$TimePoint
+
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        treatment+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+
+
+# weighted unifrac
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+####### plot #####
+####### plot #####
+####### plot #####
+
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ps_wild_V4))[,c("feature.id", "treatment")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+
+
+centroids_df<-data.frame(final_model_df$centroids)
+centroids_df
+
+vectors_wunifrac1<-vectors_df
+centroids_wunifrac1<-centroids_df
+
+pal<-pals::stepped3()[c(1,5,9,13)]
+
+
+p1<- ggplot(vectors_wunifrac1, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = treatment, col = treatment), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =treatment), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  
+  theme_bw()+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  theme_light(base_size = 12)+
+  labs(fill = "Carot. treatment", col = "Carot. treatment")
+
+
+####### ITS ##########
+####### ITS ##########
+####### ITS ##########
+####### ITS ##########
+
+
+####
+
+wunifrac_dist<-distance(ps_wild_ITS, method = "wunifrac")
+otutable<-data.frame(t(ps_wild_ITS@otu_table@.Data))
+metadata <- data.frame(sample_data(ps_wild_ITS))
+names(metadata)
+
+
+Seq_depth <- as.numeric(scale(metadata$Seq_depth))
+treatment <-metadata$treatment
+time_point<-metadata$TimePoint
+
+
+
+
+final_model<-capscale(wunifrac_dist ~ 
+                        treatment+
+                        Seq_depth,
+                      env = metadata, 
+                      comm = otutable) 
+
+
+
+anova_wunifrac<-anova.cca(final_model, by="terms")
+anova_wunifrac
+
+## extract data from model
+
+final_model_df<-scores(final_model)
+
+# extract CAP scores
+
+vectors_df<-data.frame(final_model_df$sites)
+vectors_df$feature.id<-row.names(vectors_df)
+
+
+# merge with info on dominant family
+
+sample_metadata<-data.frame(sample_data(ps_wild_V4))[,c("feature.id", "treatment")]
+vectors_df<-merge(vectors_df, sample_metadata, by = "feature.id")
+
+
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+#### add arrows #########
+
+centroids_df<-data.frame(final_model_df$centroids)
+centroids_df
+
+
+vectors_wunifrac2<-vectors_df
+centroids_wunifrac2<-centroids_df
+
+# colour palette
+pal<-pals::stepped3()[c(1,5,9,13)]
+
+
+p2<- ggplot(vectors_wunifrac2, aes(x = CAP1, y = CAP2))+
+  
+  stat_ellipse(geom = "polygon", aes(fill = treatment, col = treatment), level = 0.9, alpha = 0.3, size = 0.5)+
+  geom_point(aes(fill =treatment), pch = 21, size = 3, alpha = 1, stroke = 1, col = "black")+
+  
+  theme_bw()+
+  scale_fill_manual(values = pal)+
+  scale_color_manual(values = pal)+
+  
+  theme_light(base_size = 12)+
+  labs(fill = "Carot. treatment", col = "Carot. treatment")
+
+
+
+ggarrange(p1, p2, ncol = 2, common.legend = T, legend = "right", labels = c("a) Bacteria", "b) Fungi"))
+
+```
+
+
+### Alpha diversity: Rewilded samples
+
+```{r}
+
+##### alpha diversity ###########
+##### alpha diversity ###########
+##### alpha diversity ###########
+##### alpha diversity ###########
+
+sample_data(ps_wild_V4)$Observed<-estimate_richness(ps_wild_V4, split = TRUE, measures = c("Observed"))$Observed
+
+sample_data(ps_wild_ITS)$Observed<-estimate_richness(ps_wild_ITS, split = TRUE, measures = c("Observed"))$Observed
+
+
+p3<-ggplot(sample_data(ps_wild_V4), aes(y = Observed, x = treatment))+
+  geom_boxplot(fill = "skyblue")+
+  geom_jitter(width = 0.2)+
+  xlab("Treatment")+
+  ylab("Bacterial ASV div.")+
+  theme_light(base_size = 12)
+
+p4<- ggplot(sample_data(ps_wild_ITS), aes(y = Observed, x = treatment))+
+  geom_boxplot(fill = "skyblue")+
+  geom_jitter(width = 0.2)+
+  xlab("Treatment")+
+  ylab("Fungal ASV div.")+
+  theme_light(base_size = 12)
+
+ggarrange(p3, p4, p1, p2, ncol = 2, nrow = 2, common.legend = T, labels = c("e)", "f)", "g)", "h)"), legend = "bottom")
+
+
+### statistics
+
+metadata_wild_V4<-data.frame(sample_data(ps_wild_V4))
+
+head(metadata_wild_V4)
+
+hist(metadata_wild_V4$Observed)
+
+model_16s_wild<- glmmTMB::glmmTMB(Observed~treatment + Seq_depth, data = metadata_wild_V4)
+summary(model_16s_wild)
+data.frame(broom.mixed::tidy(model_16s_wild))
+
+
+metadata_wild_ITS<-data.frame(sample_data(ps_wild_ITS))
+
+model_ITS_wild<- glmmTMB::glmmTMB(Observed~treatment + Seq_depth, data = metadata_wild_ITS)
+summary(model_ITS_wild)
+
+
+## Table S1
+
+m1<- data.frame(broom.mixed::tidy(model_16s_lab))
+m2<- data.frame(broom.mixed::tidy(model_ITS_lab))
+m3<- data.frame(broom.mixed::tidy(model_16s_wild))
+m4<- data.frame(broom.mixed::tidy(model_ITS_wild))
+
+tableS1<-rbind(m1, m2, m3, m4)
+write.table(tableS1, "TableS1.csv")
+
+
+```
+
+## The effect of beta-carotene of common genera
+
+We tested the effect of beta carotene on lab and wild samples separately. To do this, we first need CKR transform data and then merge bacterial and fungal data for 1) lab samples and 2) rewilded samples.
+
+
+### Data prep: Merge bacterial and fungal data for laboratory samples
+
+```{r}
+
+V4_samples<-sample_names(frog_16S)
+ITS_samples<-sample_names(frog_ITS)
+samples_to_keep<-intersect(V4_samples,ITS_samples)
+
+#frog_ITS<- frog_ITS %>% speedyseq::orient_taxa(as = "rows")
+
+
+frog_16S_sub<-prune_samples(samples_to_keep, frog_16S)
+frog_ITS_sub<-prune_samples(samples_to_keep, frog_ITS)
+
+# glom by genus and get list of most common taxa per dataset
+
+V4_genus<- tax_glom(frog_16S_sub, taxrank = "Genus")
+ITS_genus<- tax_glom(frog_ITS_sub, taxrank = "Genus")
+
+### filter
+
+V4_genus<- subset_samples(V4_genus, Status == "Pre-release")
+ITS_genus<- subset_samples(ITS_genus, Status == "Pre-release")
+
+
+#########
+#########
+
+
+V4_top<-microbiome::aggregate_top_taxa(V4_genus, top = 42, level = "Genus")
+ITS_top<-microbiome::aggregate_top_taxa(ITS_genus, top = 41, level = "Genus")
+
+remove<-c("Other", "uncultured", "Kingdom_Fungi")
+
+V4_to_keep<-taxa_names(V4_top)[!taxa_names(V4_top)%in% remove]
+ITS_to_keep<-taxa_names(ITS_top)[!taxa_names(ITS_top)%in% remove]
+
+
+
+#### CLR transform ###
+#### CLR transform ###
+#### CLR transform ###
+#### CLR transform ###
+
+
+V4_clr <-microbiome::transform(V4_genus, transform = "clr")
+ITS_clr <-microbiome::transform(ITS_genus, transform = "clr")
+
+## filter taxa
+
+V4_clr<-subset_taxa(V4_clr, Genus %in% V4_to_keep)
+ITS_clr<-subset_taxa(ITS_clr, Genus %in% ITS_to_keep)
+
+## change names
+
+taxa_names(V4_clr)<- data.frame(tax_table(V4_clr))$Genus
+taxa_names(ITS_clr)<- data.frame(tax_table(ITS_clr))$Genus
+
+
+### make merged otu table 
+
+V4_otu<- data.frame(otu_table(V4_clr))
+ITS_otu<- data.frame(otu_table(ITS_clr))
+
+V4_otu[1:5,1:5]
+ITS_otu[1:5,1:5]
+
+names(V4_otu)<-sample_names(V4_clr)
+names(ITS_otu)<-sample_names(ITS_clr)
+
+full_otu<-rbind(V4_otu, ITS_otu)
+full_otu<-otu_table(full_otu, taxa_are_rows = T)
+
+# make merged tax table
+
+V4_tax<- data.frame(tax_table(V4_clr))
+ITS_tax<- data.frame(tax_table(ITS_clr))
+
+full_tax<-rbind(V4_tax, ITS_tax)
+full_tax2<-tax_table(full_tax)
+taxa_names(full_tax2)<- row.names(full_tax)
+colnames(full_tax2) <- c("Kingdom", "Phylum", "Class", 
+                         "Order", "Family", "Genus", "Species")
+
+
+### make merged metadata 
+
+metadataV4<-data.frame(sample_data(V4_clr))
+metadata<-sample_data(metadataV4)
+
+## merge
+
+merged_ps<-phyloseq(metadata, full_otu, full_tax2)
+head(tax_table(merged_ps))
+tail(tax_table(merged_ps))
+
+taxa_names(merged_ps)[1:40]<- paste("B", taxa_names(merged_ps)[1:40], sep = "_")
+taxa_names(merged_ps)[41:80]<- paste("F", taxa_names(merged_ps)[41:80], sep = "_")
+
+merged_lab_ps<-merged_ps
+
+merged_lab_ps
+
+
+```
+
+### Data prep: Merge bacterial and fungal data for rewilded samples
+
+```{r}
+
+V4_samples<-sample_names(frog_16S)
+ITS_samples<-sample_names(frog_ITS)
+samples_to_keep<-intersect(V4_samples,ITS_samples)
+
+
+frog_16S_sub<-prune_samples(samples_to_keep, frog_16S)
+frog_ITS_sub<-prune_samples(samples_to_keep, frog_ITS)
+
+# glom by genus and get list of most common taxa per dataset
+
+V4_genus<- tax_glom(frog_16S_sub, taxrank = "Genus")
+ITS_genus<- tax_glom(frog_ITS_sub, taxrank = "Genus")
+
+### filter
+
+V4_genus<- subset_samples(V4_genus, Status == "Post-release")
+ITS_genus<- subset_samples(ITS_genus, Status == "Post-release")
+
+
+#########
+#########
+#########
+#########
+
+V4_top<-microbiome::aggregate_top_taxa(V4_genus, top = 46, level = "Genus")
+ITS_top<-microbiome::aggregate_top_taxa(ITS_genus, top = 41, level = "Genus")
+
+remove<-c("Other", "uncultured", "Kingdom_Fungi", "uncultured bacterium")
+
+V4_to_keep<-taxa_names(V4_top)[!taxa_names(V4_top)%in% remove]
+ITS_to_keep<-taxa_names(ITS_top)[!taxa_names(ITS_top)%in% remove]
+
+#### CLR transform ###
+#### CLR transform ###
+#### CLR transform ###
+#### CLR transform ###
+
+
+V4_clr <-microbiome::transform(V4_genus, transform = "clr")
+ITS_clr <-microbiome::transform(ITS_genus, transform = "clr")
+
+## filter taxa
+
+V4_clr<-subset_taxa(V4_clr, Genus %in% V4_to_keep)
+ITS_clr<-subset_taxa(ITS_clr, Genus %in% ITS_to_keep)
+
+## change names
+
+taxa_names(V4_clr)<- data.frame(tax_table(V4_clr))$Genus
+taxa_names(ITS_clr)<- data.frame(tax_table(ITS_clr))$Genus
+
+
+### make merged otu table 
+
+V4_otu<- data.frame(otu_table(V4_clr))
+ITS_otu<- data.frame(otu_table(ITS_clr))
+
+V4_otu[1:5,1:5]
+ITS_otu[1:5,1:5]
+
+names(V4_otu)<-sample_names(V4_clr)
+names(ITS_otu)<-sample_names(ITS_clr)
+
+full_otu<-rbind(V4_otu, ITS_otu)
+full_otu<-otu_table(full_otu, taxa_are_rows = T)
+
+# make merged tax table
+
+V4_tax<- data.frame(tax_table(V4_clr))
+ITS_tax<- data.frame(tax_table(ITS_clr))
+
+full_tax<-rbind(V4_tax, ITS_tax)
+full_tax2<-tax_table(full_tax)
+taxa_names(full_tax2)<- row.names(full_tax)
+colnames(full_tax2) <- c("Kingdom", "Phylum", "Class", 
+                         "Order", "Family", "Genus", "Species")
+
+
+### make merged metadata 
+
+metadataV4<-data.frame(sample_data(V4_clr))
+metadata<-sample_data(metadataV4)
+
+## merge
+
+merged_ps<-phyloseq(metadata, full_otu, full_tax2)
+head(tax_table(merged_ps))
+tail(tax_table(merged_ps))
+
+taxa_names(merged_ps)[1:40]<- paste("B", taxa_names(merged_ps)[1:40], sep = "_")
+taxa_names(merged_ps)[41:80]<- paste("F", taxa_names(merged_ps)[41:80], sep = "_")
+
+merged_wild_ps<-merged_ps
+
+merged_wild_ps
+
+# shared taxa
+
+table(taxa_names(merged_wild_ps) %in% taxa_names(merged_lab_ps))
+
+taxa_names(merged_wild_ps)[taxa_names(merged_wild_ps) %in% taxa_names(merged_lab_ps)]
+
+
+
+```
+
+
+### Fit GLLVM: Lab samples
+
+```{r}
+
+ys <- data.frame(t(otu_table(merged_lab_ps)))
+names(ys) <-taxa_names(merged_lab_ps)
+
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+Xs<-data.frame(sample_data(merged_lab_ps))
+
+
+Xs$location<-factor(Xs$location)
+table(Xs$TimePoint)
+str(Xs)
+Xs$frog_id<-factor(Xs$frog_id)
+Xs$clutch<-factor(Xs$clutch)
+Xs$mass_cat<-factor(Xs$mass_cat)
+# fit model
+
+
+fit_lab <- gllvm(ys, Xs, 
+                 num.lv = 2,
+                 formula = ~  treatment,
+                 # row.eff = ~(1|clutch),
+                 starting.val = "zero",
+                 family = "gaussian")
+
+coefplot(fit_lab, cex.ylab = 0.7)
+
+```
+
+#### Extract estimates and plot
+
+```{r}
+
+df<-coef(fit_lab)
+
+est_df<-data.frame(df$Intercept)
+
+est_df2<-data.frame(df$Xcoef) # choose columns of interest
+
+est_df3<-merge(est_df, est_df2, by = 0)
+
+head(est_df3)
+
+
+
+# order genera
+
+row.names(est_df3)<-est_df3$Row.names
+est_df3<-est_df3[colnames(ys),]
+
+#put est_df3 into long format
+
+names(est_df3)[1]<- "Genus"
+names(est_df3)[2]<- "Intercept"
+
+estimates_df <- gather(est_df3, Treatment, Estimate, names(est_df3)[2]:names(est_df3)[ncol(est_df3)], factor_key=TRUE)
+
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+
+
+confint_df<-data.frame(confint(fit_lab))
+
+
+confint_df<-rbind(confint_df[rownames(confint_df) %like% "Xcoef", ],
+                  confint_df[rownames(confint_df) %like% "Intercept", ])
+
+head(confint_df)
+
+# add a column with correct variable level
+variables<- colnames(est_df3)[3:ncol(est_df3)]
+variables<-c(variables, "Intercept")
+variables1<-rep(variables, nrow(est_df))
+variables2<-variables1[order(match(variables1, variables))]
+
+#confint_df$Treatment<-c(rep("UU", 40), rep("CU", 40), rep("UC", 40), rep("CC", 40))
+confint_df$Treatment<-variables2
+
+
+# column with taxa names. Should be automatically in the correct order but double check
+
+confint_df$Genus<-rep(colnames(ys), length(unique(confint_df$Treatment)))
+
+
+
+# now have estimates, confidence intervals, aas seperate data frames, but they are in different formats. Need to massage them into one dataframe for plotting.
+
+merged<-merge(estimates_df, confint_df, by = c("Treatment", "Genus"))
+
+
+final_estimates_reduced<- merged
+names(final_estimates_reduced)[4]<-"CI_lower"
+names(final_estimates_reduced)[5]<-"CI_upper"
+
+#final_estimates<- merged[,c(1,2,3,7,8)]
+head(final_estimates_reduced)
+unique(final_estimates_reduced$Treatment)
+
+final_estimates_reduced2<-final_estimates_reduced
+
+## add significance
+
+final_estimates_reduced2$Sig<- !data.table::between(0, final_estimates_reduced2$CI_lower, final_estimates_reduced2$CI_upper)
+
+
+final_estimates_reduced2$Genus<-factor(final_estimates_reduced2$Genus)
+
+levels(final_estimates_reduced2$Treatment)
+
+final_estimates_reduced2$Treatment<-factor(final_estimates_reduced2$Treatment)
+levels(final_estimates_reduced2$Treatment)<-c("C0", "C1", "C2", "C3")
+
+
+
+ggplot(subset(final_estimates_reduced2, Treatment != "C0"), aes(y = reorder(Genus, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  facet_wrap(~Treatment, nrow = 1, scales = "free_x")  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+ggplot(subset(final_estimates_reduced2, Treatment != "C0"), aes(y = Estimate, x = Treatment, col = Sig))+
+  geom_point()+
+  facet_wrap(~Genus, scales = "free_y")  + 
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper, col = Sig), width = 0, size = 0.5)+
+  geom_hline(yintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+
+
+## plot only significant
+
+to_keep<- as.character(unique(subset(final_estimates_reduced2, Treatment != "C0" & Sig == T)$Genus))
+
+estimates_sig<- subset(final_estimates_reduced2,  Genus %in% to_keep)
+
+
+
+estimates_sig<-estimates_sig%>%arrange(Treatment, Genus)
+
+
+estimates_sig$Genus<-factor(estimates_sig$Genus)
+
+
+estimates_sig_lab<-estimates_sig
+
+P5<-ggplot(subset(estimates_sig_lab, Treatment != "C0"), aes(y = reorder(Genus, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  facet_wrap(~Treatment, nrow = 1)  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 12))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+ggplot(subset(estimates_sig_lab, Genus != "B_Arthrobacter"), aes(y = Estimate, x = Treatment, col = Sig))+
+  geom_point()+
+  facet_wrap(~Genus)  + 
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper, col = Sig), width = 0, size = 0.5)+
+  geom_hline(yintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 10))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+
+
+
+```
+
+### Fit GLLVM: Rewilded samples
+
+```{r}
+
+
+ys <- data.frame(t(otu_table(merged_wild_ps)))
+names(ys) <-taxa_names(merged_wild_ps)
+
+ys<-rescale(as.matrix(ys),  to = c(-1,1))
+
+
+Xs<-data.frame(sample_data(merged_wild_ps))
+
+
+Xs$location<-factor(Xs$location)
+table(Xs$TimePoint)
+str(Xs)
+Xs$frog_id<-factor(Xs$frog_id)
+
+# fit model
+
+
+fit_wild <- gllvm(ys, Xs, 
+                  num.lv = 2,
+                  formula = ~  treatment+TimePoint, 
+                  starting.val = "zero",
+                  family = "gaussian")
+
+coefplot(fit_wild, cex.ylab = 0.7)
+
+
+
+
+```
+
+#### Extract estimates and plot
+
+```{r}
+
+df<-coef(fit_wild)
+
+est_df<-data.frame(df$Intercept)
+
+est_df2<-data.frame(df$Xcoef) # choose columns of interest
+
+est_df3<-merge(est_df, est_df2, by = 0)
+
+head(est_df3)
+
+
+
+# order genera
+
+row.names(est_df3)<-est_df3$Row.names
+est_df3<-est_df3[colnames(ys),]
+
+#put est_df3 into long format
+
+names(est_df3)[1]<- "Genus"
+names(est_df3)[2]<- "Intercept"
+
+estimates_df <- gather(est_df3, Treatment, Estimate, names(est_df3)[2]:names(est_df3)[ncol(est_df3)], factor_key=TRUE)
+
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+############# extract confindence intervals  ####
+
+
+confint_df<-data.frame(confint(fit_wild))
+
+
+confint_df<-rbind(confint_df[rownames(confint_df) %like% "Xcoef", ],
+                  confint_df[rownames(confint_df) %like% "Intercept", ])
+
+head(confint_df)
+
+# add a column with correct variable level
+variables<- colnames(est_df3)[3:ncol(est_df3)]
+variables<-c(variables, "Intercept")
+variables1<-rep(variables, nrow(est_df))
+variables2<-variables1[order(match(variables1, variables))]
+
+#confint_df$Treatment<-c(rep("UU", 40), rep("CU", 40), rep("UC", 40), rep("CC", 40))
+confint_df$Treatment<-variables2
+
+
+# column with taxa names. Should be automatically in the correct order but double check
+
+confint_df$Genus<-rep(colnames(ys), length(unique(confint_df$Treatment)))
+
+
+
+# now have estimates, confidence intervals, aas seperate data frames, but they are in different formats. Need to massage them into one dataframe for plotting.
+
+merged<-merge(estimates_df, confint_df, by = c("Treatment", "Genus"))
+
+
+final_estimates_reduced<- merged
+names(final_estimates_reduced)[4]<-"CI_lower"
+names(final_estimates_reduced)[5]<-"CI_upper"
+
+#final_estimates<- merged[,c(1,2,3,7,8)]
+head(final_estimates_reduced)
+unique(final_estimates_reduced$Treatment)
+
+final_estimates_reduced2<-final_estimates_reduced
+
+## add significance
+
+final_estimates_reduced2$Sig<- !data.table::between(0, final_estimates_reduced2$CI_lower, final_estimates_reduced2$CI_upper)
+
+
+final_estimates_reduced2$Genus<-factor(final_estimates_reduced2$Genus)
+
+levels(final_estimates_reduced2$Treatment)
+
+final_estimates_reduced2$Treatment<-factor(final_estimates_reduced2$Treatment)
+levels(final_estimates_reduced2$Treatment)<-c("C0", "C1", "C2", "C3", "T3")
+
+final_estimates_reduced2<-subset(final_estimates_reduced2, Treatment != "T3" )
+
+ggplot(subset(final_estimates_reduced2, Treatment != "C0" ), aes(y = reorder(Genus, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  facet_wrap(~Treatment, nrow = 1, scales = "free_x")  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+ggplot(subset(final_estimates_reduced2, Treatment != "C0" & Treatment != "T3"), aes(y = Estimate, x = Treatment, col = Sig))+
+  geom_point()+
+  facet_wrap(~Genus, scales = "free_y")  + 
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper, col = Sig), width = 0, size = 0.5)+
+  geom_hline(yintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+
+
+## plot only significant
+
+to_keep<- as.character(unique(subset(final_estimates_reduced2, Treatment != "C0" & Sig == T )$Genus))
+
+estimates_sig<- subset(final_estimates_reduced2,  Genus %in% to_keep)
+
+
+
+estimates_sig<-estimates_sig%>%arrange(Treatment, Genus)
+
+
+estimates_sig$Genus<-factor(estimates_sig$Genus)
+
+
+estimates_sig_wild<-estimates_sig
+
+P6<-ggplot(subset(estimates_sig_wild, Treatment != "C0"), aes(y = reorder(Genus, Estimate), x = Estimate, col = Sig))+
+  geom_point()+
+  facet_wrap(~Treatment, nrow = 1)  + 
+  geom_errorbarh(aes(xmin = CI_lower, xmax = CI_upper, col = Sig), height = 0, size = 0.5)+
+  geom_vline(xintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 12))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+ggplot(subset(estimates_sig_wild, Treatment != "UU"), aes(y = Estimate, x = Treatment, col = Sig))+
+  geom_point()+
+  facet_wrap(~Genus)  + 
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper, col = Sig), width = 0, size = 0.5)+
+  geom_hline(yintercept = 0, linetype = "longdash")+
+  theme_bw()+
+  scale_color_manual(values = c("grey", "red"))+
+  theme(axis.title.y = element_blank())+
+  theme(axis.text.y = element_text(face="bold", size = 8))+
+  theme(legend.position = "none")+
+  theme(plot.margin=unit(c(0.2,0.2, 0.2, 0.6),"cm"))
+
+
+
+ggarrange(p3, p4, p1, p2, P5, P6, ncol = 2, nrow = 3, common.legend = T, legend = "bottom")
+
+
+
+
+```
+
