@@ -13,3 +13,7 @@ frog_ITS.RDS = phyloseq pbject with fungal ITS amplicon data
 rewilding_analysis.html = R markdown of analysis (please download)
 
 rewilding_analysis.Rmd = R code of analysis
+
+Qiime2_code_16S.txt = QIIME2 code for 16S processing
+
+Qiime2_code_ITS.txt = QIIME2 code for ITS processing
