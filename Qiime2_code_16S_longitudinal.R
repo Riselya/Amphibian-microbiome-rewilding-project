@@ -1,0 +1,250 @@
+
+
+############################## QIIME2 ANALYSIS 
+
+cd UOW_frogs
+
+conda activate qiime2-2020.2
+
+#gzip *.fastq
+
+##import sequence data
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path 16S_sequences \
+  --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+  --output-path demux-paired-end.qza
+
+
+##how many sequences were obtained per sample?
+
+
+qiime demux summarize \
+--i-data demux-paired-end.qza \
+--o-visualization demux-paired-end.qzv
+
+##view wtih qiime2
+
+
+## dada2 quality control, joins sequences, filters out chimeras
+
+qiime dada2 denoise-paired \
+--i-demultiplexed-seqs demux-paired-end.qza \
+--p-trim-left-f 17 \
+--p-trim-left-r 20 \
+--p-trunc-len-f 277 \
+--p-trunc-len-r 220 \
+--p-n-threads 8 \
+--o-representative-sequences rep-seqs-dada2.qza \
+--o-table table-dada2.qza \
+--o-denoising-stats stats-dada2.qza
+
+
+#Target V3-V4
+#341F - 806R
+#Forward Primer(341F)
+#CCTAYGGGRBGCASCAG
+#ReversePrimer(806R)
+#GGACTACNNGGGTATCTAAT
+#Application
+#Amplicon sequencing
+#ReadLength
+#300bpPE
+
+
+
+
+##visualize denoising results per sample
+
+qiime metadata tabulate \
+--m-input-file stats-dada2.qza \
+--o-visualization stats-dada2.qzv 
+
+#########  summarize count table 
+
+qiime feature-table summarize \
+--i-table table-dada2.qza \
+--o-visualization table-dada2.qzv \
+--m-sample-metadata-file frog_metadata_2022.txt
+
+
+##############################################################
+
+
+qiime feature-table tabulate-seqs \
+--i-data rep-seqs-dada2.qza \
+--o-visualization rep-seqs-dada2.qzv
+
+
+######train silva classifier for V3-V4 region
+######train silva classifier for V3-V4 region
+######train silva classifier for V3-V4 region
+
+#341F - 806R
+# 341F CCTAYGGGRBGCASCAG
+# 806R GGACTACNNGGGTATCTAAT
+
+
+qiime tools import \
+--type 'FeatureData[Sequence]' \
+--input-path silva_132_99_16S.fna \
+--output-path silvafasta.qza
+
+
+qiime tools import \
+--type 'FeatureData[Taxonomy]' \
+--input-format HeaderlessTSVTaxonomyFormat \
+--input-path taxonomy_7_levels.txt \
+--output-path ref-taxonomy.qza
+
+#Forward Primer(341F)
+#CCTAYGGGRBGCASCAG
+#ReversePrimer(806R)
+#GGACTACNNGGGTATCTAAT
+
+qiime feature-classifier extract-reads \
+--i-sequences silvafasta.qza \
+--p-f-primer CCTAYGGGRBGCASCAG \
+--p-r-primer GGACTACNNGGGTATCTAAT \
+--o-reads ref-seqs.qza
+
+
+
+qiime feature-classifier fit-classifier-naive-bayes \
+--i-reference-reads ref-seqs.qza \
+--i-reference-taxonomy ref-taxonomy.qza \
+--o-classifier silva.341.806.classifier.qza
+
+
+
+###############assign taxonomy to the unique sequences
+
+
+qiime feature-classifier classify-sklearn \
+--i-classifier silva.341.806.classifier.qza \
+--i-reads rep-seqs-dada2.qza \
+--p-n-jobs 8 \
+--o-classification taxonomySilva.qza
+
+
+#visualize 
+
+qiime metadata tabulate \
+--m-input-file taxonomySilva.qza \
+--o-visualization taxonomySilva.qzv
+
+
+########## create barplot
+
+
+qiime taxa barplot \
+--i-table table-dada2.qza \
+--i-taxonomy taxonomySilva.qza \
+--m-metadata-file frog_metadata_2022.txt \
+--o-visualization taxa-bar-plots.qzv
+
+
+
+#################################
+
+
+qiime tools export \
+--input-path rep-seqs-dada2.qza \
+--output-path exported-representative-sequences
+
+### open rep.seqs file in in qiime2 and save fasta file - transfer to server folder
+#Add the follwing sequence at the bottom of the file. It will be used to root our tree in later analyses
+
+#>KT433146.1 Uncultured archaeon clone denovo4500 16S ribosomal RNA gene, partial sequence
+#TACGGAGGGTCCAAGCGTTATCCGGAATCATTGGGTTTAAAGGGTGCGCAGGCGGTAGTGTAAGTCAGTGGTGAAATCTCTCGGCTCAACCGAGAAACTGCCATTGATACTGCAGTACTTGAGTACAGTTGAAGTAGGCGGAATGTGTAGTGTAGCGGTGAAATGCTTAGATATTACACAGAACACCGATAGCGAAGGCAGCTTACTAAACTGATATTGACGCTCATGCACGAAAGCGTGGGGAGCGAACAGGATTAGAAACCCGTGTAGT
+
+
+
+#lets align our fasta file using mafft
+
+mafft sequences_rooted.fasta > SequencesAligned.fasta
+
+
+#We next build a tree using the software FastTree:
+
+FastTree < SequencesAligned.fasta > frog.tree 
+
+
+
+
+#open the tree in Dendroscope, re-root the tree and remove the taxa beloning to archea
+#EXPORT the file as frog.newick format and we now have a rooted tree
+
+
+
+#################### export files
+
+qiime tools export \
+--input-path table-dada2.qza \
+--output-path exported-count-table
+
+
+qiime tools export \
+--input-path taxonomySilva.qza \
+--output-path exported-taxonomy
+
+
+
+
+##add taxonomy to biom file so that it is in right format for R
+
+##move feature-table.biom and taxonomy file into main folder
+
+##concert it to a text file in linux
+#quit qiime
+
+biom convert -i feature-table.biom -o otu_table.txt --to-tsv
+
+
+#open R
+
+R
+
+##add 'taxonomy' column to count table
+
+table<-read.csv("otu_table.txt",sep='\t',check.names=FALSE,skip=1)
+
+head(table)
+
+
+
+Taxonomy<-read.table ("taxonomy.tsv",sep='\t', header=TRUE)
+
+head(Taxonomy)
+names(Taxonomy)
+
+table$taxonomy<-with(Taxonomy,Taxon[match(table$"#OTU ID",Taxonomy$Feature.ID)])
+
+##make sure there is an extra line at the top
+# Constructed from biom file
+
+
+#save
+write.table(table,"otu_table_tax.txt",row.names=FALSE,sep="\t")
+
+
+quit()
+n
+sed -i '1s/^/# Constructed from biom file\n/' otu_table_tax.txt
+sed -i -e 's/"//g' otu_table_tax.txt
+ls
+
+
+##convert back to biom file in linux
+
+biom convert -i otu_table_tax.txt -o new_otu_table.biom --to-hdf5 --table-type="OTU table" --process-obs-metadata taxonomy
+
+
+
+## export new biom file to R folder
+
+
+
+
+
