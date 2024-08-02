@@ -1,11 +1,6 @@
 ############################## QIIME2 ANALYSIS 
 
-cd UOW_frogs
-
-conda activate qiime2-2020.2
-conda activate qiime2-amplicon-2024.5
-
-#gzip *.fastq
+# conda active qiime2
 
 ##import sequence data
 
