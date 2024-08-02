@@ -2,11 +2,7 @@
 
 ############################## QIIME2 ANALYSIS 
 
-cd UOW_frogs
-
 conda activate qiime2-2020.2
-
-#gzip *.fastq
 
 ##import sequence data
 
