@@ -6,9 +6,9 @@ by Alice Risely, Phillip G. Byrne, David A, Hunter, Ana S. Carranco, Bethany J. 
 
 Data:
 
-frog_16S.RDS = phyloseq object with bacterial 16S amplicon data
+frog_16S.RDS = phyloseq object with skin bacterial 16S amplicon data (V3-4 region)
 
-frog_ITS.RDS = phyloseq pbject with fungal ITS amplicon data
+frog_ITS.RDS = phyloseq pbject with skin fungal ITS amplicon data (ITS1-2 region)
 
 rewilding_analysis.html = R markdown of analysis (please download)
 
