@@ -1,6 +1,6 @@
 Data (in phyloseq format) and R code to for the manuscript:
 
-Extensive diversification of amphibian skin micro- and mycobiomes upon rewilding, with limited inter-domain interactions or effects of dietary ꞵ-carotene 
+Skin bacterial and fungal microbiome responses to diet supplementation and rewilding in the critically endangered Southern Corroboree frog
 
 by Alice Risely, Phillip G. Byrne, David A, Hunter, Ana S. Carranco, Bethany J. Hoye, and Aimee J. Silla
 
